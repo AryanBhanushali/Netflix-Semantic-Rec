@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+pandas
+numpy
+python-dotenv
+sentence-transformers
+chromadb
+pinecone
+langchain
+langgraph
+langchain-ollama
+langchain-core
+scikit-learn
+requests

@@ -1,0 +1,21 @@
+services:
+  chromadb:
+    image: chromadb/chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chromadb:/chroma/chroma
+
+  app:
+    build: .
+    ports:
+      - "8001:8001"
+    depends_on:
+      - chromadb
+    env_file:
+      - .env
+    environment:
+      - CHROMA_HOST=chromadb
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
