@@ -2,9 +2,9 @@
 
 A semantic movie recommendation system that uses fine-tuned LLM embeddings, dual vector databases (ChromaDB + Pinecone), and a LangGraph multi-agent pipeline to deliver personalized recommendations — even for cold-start users with zero viewing history.
 
-## Resume Bullet
+## The problem
 
-> Fine-tuned Llama 3.1 (8B) with QLoRA on 25K movie-similarity pairs and indexed 4,391 movie embeddings into ChromaDB and Pinecone; semantic search delivered 78x more diverse personalized recommendations than collaborative filtering for cold-start users with no viewing history.
+Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list — the same 10 movies for everyone. This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
 
 ## Architecture
 
@@ -12,30 +12,30 @@ A semantic movie recommendation system that uses fine-tuned LLM embeddings, dual
 User Query
     │
     ▼
-┌─────────────────────────────────────────────────┐
-│              LangGraph Agent                     │
-│                                                  │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐    │
-│  │  Query   │──▶│  Vector  │──▶│Re-Ranker │    │
-│  │  Parser  │   │  Search  │   │(Llama 3.1│    │
-│  │(Llama3.1)│   │          │   │   8B)    │    │
-│  └──────────┘   └────┬─────┘   └────┬─────┘    │
-│                      │              │           │
-│                      ▼              ▼           │
-│               ┌────────────┐  ┌──────────┐     │
-│               │ ChromaDB   │  │Explainer │     │
-│               │ (Docker)   │  │(Llama3.1)│     │
-│               ├────────────┤  └──────────┘     │
-│               │ Pinecone   │                    │
-│               │ (Cloud)    │                    │
-│               └────────────┘                    │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                  LangGraph Agent                      │
+│                                                       │
+│  ┌───────────┐   ┌───────────┐   ┌───────────┐      │
+│  │  Query    │──▶│  Vector   │──▶│ Re-Ranker │      │
+│  │  Parser   │   │  Search   │   │ (Llama    │      │
+│  │(Llama 3.1)│   │           │   │  3.1 8B)  │      │
+│  └───────────┘   └─────┬─────┘   └─────┬─────┘      │
+│                        │               │              │
+│                        ▼               ▼              │
+│                 ┌────────────┐   ┌───────────┐       │
+│                 │ ChromaDB   │   │ Explainer │       │
+│                 │ (Docker)   │   │ (Llama    │       │
+│                 ├────────────┤   │  3.1 8B)  │       │
+│                 │ Pinecone   │   └───────────┘       │
+│                 │ (Cloud)    │                        │
+│                 └────────────┘                        │
+└──────────────────────────────────────────────────────┘
     │
     ▼
 FastAPI (port 8001)
 ```
 
-## How It Works
+## How it works
 
 **Embeddings:** Movie plots, genres, cast, keywords, and director are combined into a rich text field per movie. Sentence-transformers (all-MiniLM-L6-v2) encodes these into 384-dimensional vectors for semantic search.
 
@@ -50,9 +50,9 @@ FastAPI (port 8001)
 3. **Re-Ranker** — Llama 3.1 8B re-ranks candidates based on query context
 4. **Explainer** — generates a natural language explanation of recommendations
 
-## Benchmark Results
+## Cold-start benchmark
 
-### Semantic vs Collaborative Filtering (Cold-Start Users)
+The key experiment: simulate users with no viewing history. The user provides only a text description of what they like. Compare semantic search against a standard CF baseline (SVD on MovieLens 100K).
 
 | Metric                  | Semantic | CF (SVD) |
 | ----------------------- | -------- | -------- |
@@ -61,134 +61,9 @@ FastAPI (port 8001)
 | Unique recs (196 users) | 782      | 10       |
 | Personalization         | Yes      | None     |
 
-**Key finding:** CF degrades to a static popularity list for cold-start users — the same 10 movies (Shawshank Redemption, Godfather, Fight Club, etc.) for every user regardless of taste. Semantic search provides 78x more diverse, personalized recommendations using only a text description of preferences.
+CF degrades to a static popularity list for cold-start users — the same 10 movies (Shawshank Redemption, Godfather, Fight Club, etc.) for every user regardless of taste. Semantic search provides 78x more diverse, personalized recommendations using only a text description of preferences.
 
-### Base Embeddings Precision@10
-
-Tested on 2,595 movies against TMDB ground-truth similar movies:
-
-- Base embeddings (all-MiniLM-L6-v2): 0.0137
-
-Low precision is expected — TMDB's "similar movies" is editorially curated, not purely plot-based similarity.
-
-## Datasets
-
-- **TMDB 5000 Movies** — plots, genres, cast, keywords (Kaggle)
-- **MovieLens 100K** — user ratings for CF baseline comparison
-- **TMDB API** — similar movies endpoint (ground truth for evaluation)
-
-## Tech Stack
-
-- **LLM:** Llama 3.1 8B (Ollama) — query parsing, re-ranking, explanation
-- **Fine-Tuning:** QLoRA via HuggingFace PEFT + bitsandbytes (4-bit NF4)
-- **Embeddings:** sentence-transformers (all-MiniLM-L6-v2)
-- **Vector DBs:** ChromaDB (Docker), Pinecone (cloud)
-- **Agent:** LangGraph (4-node pipeline)
-- **API:** FastAPI
-- **Infra:** Docker Compose, NVIDIA H200 (training), RTX 4070 (inference)
-
-## Project Structure
-
-```
-netflix-semantic-rec/
-├── notebooks/
-│   ├── 01_data_prep.ipynb          # TMDB cleaning, pair generation
-│   ├── 02_lora_finetune.ipynb      # QLoRA training on H200
-│   └── 03_benchmark.ipynb          # semantic vs CF comparison
-├── src/
-│   ├── embeddings/
-│   │   ├── baseline.py             # sentence-transformers embeddings
-│   │   └── finetuned.py            # fine-tuned model embeddings
-│   ├── vectordb/
-│   │   ├── chroma_client.py        # ChromaDB Docker indexing
-│   │   └── pinecone_client.py      # Pinecone cloud indexing
-│   ├── agent/
-│   │   ├── graph.py                # LangGraph 4-node agent
-│   │   └── tools.py                # search + rerank tools
-│   └── api/
-│       └── main.py                 # FastAPI endpoints
-├── data/
-│   └── processed/
-├── models/
-│   └── finetuned/                  # QLoRA adapter weights
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-└── README.md
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Docker Desktop
-- Ollama with `llama3.1:8b`
-- Python 3.12
-- Pinecone API key (free tier)
-
-### Setup
-
-```bash
-# Clone the repo
-git clone https://github.com/yourusername/netflix-semantic-rec.git
-cd netflix-semantic-rec
-
-# Start ChromaDB
-docker compose up -d chromadb
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment
-cp .env.example .env
-# Fill in PINECONE_API_KEY, TMDB_API_KEY
-
-# Generate embeddings
-python src/embeddings/baseline.py
-
-# Index into vector databases
-python src/vectordb/chroma_client.py
-python src/vectordb/pinecone_client.py
-
-# Start Ollama
-ollama run llama3.1:8b
-
-# Start the API
-uvicorn src.api.main:app --port 8001
-```
-
-### API Endpoints
-
-```bash
-# Health check
-GET /health
-
-# Recommend by movie title (vector similarity)
-POST /recommend/title
-{"title": "Inception", "n": 5}
-
-# Recommend by free-text query (semantic search)
-POST /recommend/query
-{"query": "mind-bending sci-fi about dreams", "n": 5}
-
-# Full agent pipeline (parse → search → re-rank → explain)
-POST /recommend/agent
-{"query": "movies similar to Inception", "n": 5}
-```
-
-### Example Output
-
-```
-POST /recommend/title {"title": "Inception", "n": 5}
-
-→ A Scanner Darkly      (similarity: 0.58)
-→ Primer                (similarity: 0.55)
-→ Escape Plan           (similarity: 0.55)
-→ Unknown               (similarity: 0.58)
-→ Stolen                (similarity: 0.54)
-```
-
-## Training Details
+## Training details
 
 | Parameter        | Value                             |
 | ---------------- | --------------------------------- |
@@ -203,3 +78,143 @@ POST /recommend/title {"title": "Inception", "n": 5}
 | Final Train Loss | 0.1638                            |
 | Final Val Loss   | 0.1728                            |
 | GPU              | NVIDIA H200 (Northeastern HPC)    |
+
+## Stack
+
+| Layer         | Technology                               |
+| ------------- | ---------------------------------------- |
+| Fine-Tuning   | QLoRA (HuggingFace PEFT + bitsandbytes)  |
+| LLM           | Llama 3.1 8B via Ollama                  |
+| Embeddings    | sentence-transformers (all-MiniLM-L6-v2) |
+| Vector DB     | ChromaDB (Docker), Pinecone (Cloud)      |
+| Agent         | LangGraph + LangChain                    |
+| API           | FastAPI                                  |
+| Orchestration | Docker Compose                           |
+| Training GPU  | NVIDIA H200 (Northeastern HPC)           |
+
+## Running it
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Ollama with `llama3.1:8b`
+- Python 3.12
+- Pinecone API key (free tier)
+- TMDB API key (free)
+
+### Setup
+
+1. Create a `.env` file in the project root:
+
+   ```
+   KAGGLE_USERNAME=your_username
+   KAGGLE_KEY=your_kaggle_key
+   TMDB_API_KEY=your_tmdb_key
+   PINECONE_API_KEY=your_pinecone_key
+   TMDB_PATH=data/processed
+   MOVIELENS_PATH=data/processed
+   FINETUNED_MODEL_PATH=models/finetuned
+   ```
+
+2. Download and process the data:
+
+   ```bash
+   pip install -r requirements.txt
+   python download_data.py
+   ```
+
+3. Generate embeddings and index into vector databases:
+
+   ```bash
+   python src/embeddings/baseline.py
+   docker compose up -d chromadb
+   python src/vectordb/chroma_client.py
+   python src/vectordb/pinecone_client.py
+   ```
+
+4. Start Ollama:
+
+   ```bash
+   ollama run llama3.1:8b
+   ```
+
+5. Start the API:
+
+   ```bash
+   uvicorn src.api.main:app --port 8001
+   ```
+
+6. Open the API docs at `http://localhost:8001/docs`.
+
+### Services
+
+| Service  | URL                        |
+| -------- | -------------------------- |
+| API docs | http://localhost:8001/docs |
+| ChromaDB | http://localhost:8000      |
+
+## API
+
+| Endpoint           | Method | Description                                              |
+| ------------------ | ------ | -------------------------------------------------------- |
+| `/health`          | GET    | Health check                                             |
+| `/recommend/title` | POST   | Recommend by movie title (vector similarity)             |
+| `/recommend/query` | POST   | Recommend by free-text query (semantic search)           |
+| `/recommend/agent` | POST   | Full agent pipeline (parse → search → re-rank → explain) |
+
+### Example
+
+```bash
+POST /recommend/agent
+{"query": "movies similar to Inception", "n": 5}
+
+→ Inception           (similarity: 0.62)
+→ Trance              (similarity: 0.49)
+→ Cube                (similarity: 0.49)
+→ Vanilla Sky         (similarity: 0.47)
+→ Primer              (similarity: 0.47)
+
+Explanation: "Recommended movies share themes of mind-bending
+psychological tension, reality manipulation, and layered
+narratives similar to Inception..."
+```
+
+## Data
+
+- **TMDB 5000 Movies** — plots, genres, cast, keywords ([Kaggle](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata))
+- **MovieLens 100K** — user ratings for CF baseline comparison ([Kaggle](https://www.kaggle.com/datasets/sriharshabsprasad/movielens-dataset-100k-ratings))
+- **TMDB API** — similar movies endpoint (ground truth for evaluation)
+
+## Project structure
+
+```
+netflix-semantic-rec/
+├── notebooks/
+│   ├── 01_data_prep.ipynb          TMDB cleaning, pair generation
+│   ├── 02_lora_finetune.ipynb      QLoRA training on H200
+│   └── 03_benchmark.ipynb          semantic vs CF comparison
+├── src/
+│   ├── embeddings/
+│   │   ├── baseline.py             sentence-transformers embeddings
+│   │   └── finetuned.py            fine-tuned model embeddings
+│   ├── vectordb/
+│   │   ├── chroma_client.py        ChromaDB Docker indexing
+│   │   └── pinecone_client.py      Pinecone cloud indexing
+│   ├── agent/
+│   │   ├── graph.py                LangGraph 4-node agent
+│   │   └── tools.py                search + rerank tools
+│   └── api/
+│       └── main.py                 FastAPI endpoints
+├── data/
+│   └── processed/                  processed CSVs (gitignored)
+├── models/
+│   └── finetuned/                  QLoRA adapter weights
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
+## Performance notes
+
+The Ollama container runs CPU-only by default, so agent responses take 2 to 5 minutes. The `/recommend/title` and `/recommend/query` endpoints are instant since they only use vector similarity. To speed up agent responses, configure GPU passthrough for the Ollama service via the NVIDIA Container Toolkit.
