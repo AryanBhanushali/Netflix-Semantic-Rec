@@ -2,6 +2,8 @@
 
 A semantic movie recommendation system that uses fine-tuned LLM embeddings, dual vector databases (ChromaDB + Pinecone), and a LangGraph multi-agent pipeline to deliver personalized recommendations — even for cold-start users with zero viewing history.
 
+The whole system runs with `docker compose up`.
+
 ## The problem
 
 Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list — the same 10 movies for everyone. This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
@@ -97,7 +99,6 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
 ### Prerequisites
 
 - Docker and Docker Compose
-- Ollama with `llama3.1:8b`
 - Python 3.12
 - Pinecone API key (free tier)
 - TMDB API key (free)
@@ -121,27 +122,26 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
    ```bash
    pip install -r requirements.txt
    python download_data.py
+   python src/embeddings/baseline.py
    ```
 
-3. Generate embeddings and index into vector databases:
+3. Start the services:
 
    ```bash
-   python src/embeddings/baseline.py
-   docker compose up -d chromadb
+   docker compose up -d
+   ```
+
+4. Pull the LLM model:
+
+   ```bash
+   docker compose exec ollama ollama pull llama3.1:8b
+   ```
+
+5. Index into vector databases:
+
+   ```bash
    python src/vectordb/chroma_client.py
    python src/vectordb/pinecone_client.py
-   ```
-
-4. Start Ollama:
-
-   ```bash
-   ollama run llama3.1:8b
-   ```
-
-5. Start the API:
-
-   ```bash
-   uvicorn src.api.main:app --port 8001
    ```
 
 6. Open the API docs at `http://localhost:8001/docs`.
