@@ -1,12 +1,12 @@
 # Netflix Semantic Recommendation Engine
 
-A semantic movie recommendation system that uses fine-tuned LLM embeddings, dual vector databases (ChromaDB + Pinecone), and a LangGraph multi-agent pipeline to deliver personalized recommendations — even for cold-start users with zero viewing history.
+A semantic movie recommendation system that uses fine-tuned LLM embeddings, dual vector databases (ChromaDB + Pinecone), and a LangGraph multi-agent pipeline to deliver personalized recommendations, even for cold-start users with zero viewing history.
 
 The whole system runs with `docker compose up`.
 
 ## The problem
 
-Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list — the same 10 movies for everyone. This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
+Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list (the same 10 movies for everyone). This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
 
 ## Architecture
 
@@ -15,22 +15,22 @@ User Query
     │
     ▼
 ┌──────────────────────────────────────────────────────┐
-│                  LangGraph Agent                      │
-│                                                       │
-│  ┌───────────┐   ┌───────────┐   ┌───────────┐      │
-│  │  Query    │──▶│  Vector   │──▶│ Re-Ranker │      │
-│  │  Parser   │   │  Search   │   │ (Llama    │      │
-│  │(Llama 3.1)│   │           │   │  3.1 8B)  │      │
-│  └───────────┘   └─────┬─────┘   └─────┬─────┘      │
-│                        │               │              │
-│                        ▼               ▼              │
+│                  LangGraph Agent                     │
+│                                                      │
+│  ┌───────────┐   ┌───────────┐   ┌───────────┐       │
+│  │  Query    │──▶│  Vector   │──▶│ Re-Ranker│       │
+│  │  Parser   │   │  Search   │   │ (Llama    │       │
+│  │(Llama 3.1)│   │           │   │  3.1 8B)  │       │
+│  └───────────┘   └─────┬─────┘   └─────┬─────┘       │
+│                        │               │             │
+│                        ▼               ▼             │
 │                 ┌────────────┐   ┌───────────┐       │
 │                 │ ChromaDB   │   │ Explainer │       │
 │                 │ (Docker)   │   │ (Llama    │       │
 │                 ├────────────┤   │  3.1 8B)  │       │
 │                 │ Pinecone   │   └───────────┘       │
-│                 │ (Cloud)    │                        │
-│                 └────────────┘                        │
+│                 │ (Cloud)    │                       │
+│                 └────────────┘                       │
 └──────────────────────────────────────────────────────┘
     │
     ▼
