@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Netflix Semantic Rec</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Inter", sans-serif;
+        background: #0a0a0a;
+        color: #e5e5e5;
+        min-height: 100vh;
+      }
+
+      header {
+        padding: 32px 40px;
+        border-bottom: 1px solid #1a1a1a;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+      }
+
+      header h1 {
+        font-family: "Playfair Display", serif;
+        font-size: 24px;
+        color: #e50914;
+        letter-spacing: -0.5px;
+      }
+
+      header span {
+        font-size: 13px;
+        color: #666;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 48px 40px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 40px;
+        border-bottom: 1px solid #222;
+      }
+
+      .tab {
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #666;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .tab:hover {
+        color: #999;
+      }
+
+      .tab.active {
+        color: #e50914;
+        border-bottom-color: #e50914;
+      }
+
+      .panel {
+        display: none;
+      }
+      .panel.active {
+        display: block;
+      }
+
+      .input-group {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        padding: 14px 18px;
+        background: #141414;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        color: #e5e5e5;
+        font-size: 15px;
+        font-family: "Inter", sans-serif;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      input[type="text"]:focus {
+        border-color: #e50914;
+      }
+
+      input[type="text"]::placeholder {
+        color: #555;
+      }
+
+      select {
+        padding: 14px 18px;
+        background: #141414;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        color: #e5e5e5;
+        font-size: 14px;
+        font-family: "Inter", sans-serif;
+        outline: none;
+        cursor: pointer;
+        min-width: 70px;
+      }
+
+      button {
+        padding: 14px 28px;
+        background: #e50914;
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        font-family: "Inter", sans-serif;
+        cursor: pointer;
+        transition: background 0.2s;
+        white-space: nowrap;
+      }
+
+      button:hover {
+        background: #c4070f;
+      }
+      button:disabled {
+        background: #333;
+        cursor: not-allowed;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #444;
+        margin-bottom: 32px;
+      }
+
+      .results {
+        margin-top: 32px;
+      }
+
+      .movie-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 20px;
+        background: #141414;
+        border: 1px solid #1e1e1e;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        transition: border-color 0.2s;
+      }
+
+      .movie-card:hover {
+        border-color: #333;
+      }
+
+      .movie-info {
+        flex: 1;
+      }
+
+      .movie-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 4px;
+      }
+
+      .movie-meta {
+        font-size: 13px;
+        color: #777;
+      }
+
+      .movie-score {
+        text-align: right;
+        min-width: 80px;
+      }
+
+      .similarity {
+        font-size: 22px;
+        font-weight: 600;
+        color: #e50914;
+      }
+
+      .score-label {
+        font-size: 11px;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .rating {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #1a1a1a;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        color: #ccc;
+        margin-left: 8px;
+      }
+
+      .rating::before {
+        content: "★";
+        color: #f5c518;
+      }
+
+      .explanation {
+        margin-top: 24px;
+        padding: 20px;
+        background: #111;
+        border-left: 3px solid #e50914;
+        border-radius: 0 8px 8px 0;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #bbb;
+      }
+
+      .explanation-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #e50914;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 48px;
+        color: #555;
+        font-size: 14px;
+      }
+
+      .loading.active {
+        display: block;
+      }
+
+      .spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #222;
+        border-top-color: #e50914;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 16px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .empty {
+        text-align: center;
+        padding: 64px 20px;
+        color: #333;
+        font-size: 15px;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        background: #1c1c1c;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #888;
+        margin-left: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Semantic Rec</h1>
+      <span>movie recommendations powered by LLM embeddings</span>
+    </header>
+
+    <div class="container">
+      <div class="tabs">
+        <div class="tab active" data-panel="title">Find similar</div>
+        <div class="tab" data-panel="query">Describe what you want</div>
+        <div class="tab" data-panel="agent">Ask the agent</div>
+      </div>
+
+      <div id="title" class="panel active">
+        <div class="input-group">
+          <input
+            type="text"
+            id="title-input"
+            placeholder="Enter a movie title, e.g. Inception"
+          />
+          <select id="title-n">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+          </select>
+          <button onclick="searchByTitle()">Search</button>
+        </div>
+        <p class="hint">
+          Uses vector similarity to find movies with similar plot, cast, genre,
+          and tone.
+        </p>
+        <div id="title-loading" class="loading">
+          <div class="spinner"></div>
+          Searching...
+        </div>
+        <div id="title-results" class="results"></div>
+      </div>
+
+      <div id="query" class="panel">
+        <div class="input-group">
+          <input
+            type="text"
+            id="query-input"
+            placeholder="e.g. mind-bending sci-fi about dreams and reality"
+          />
+          <select id="query-n">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+          </select>
+          <button onclick="searchByQuery()">Search</button>
+        </div>
+        <p class="hint">
+          Describe a mood, genre, theme, or plot. Semantic search finds matching
+          movies.
+        </p>
+        <div id="query-loading" class="loading">
+          <div class="spinner"></div>
+          Searching...
+        </div>
+        <div id="query-results" class="results"></div>
+      </div>
+
+      <div id="agent" class="panel">
+        <div class="input-group">
+          <input
+            type="text"
+            id="agent-input"
+            placeholder="e.g. movies similar to Inception"
+          />
+          <select id="agent-n">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+          </select>
+          <button onclick="searchByAgent()">Ask</button>
+        </div>
+        <p class="hint">
+          The full pipeline: parses your intent, searches, re-ranks with Llama
+          3.1, and explains why.
+        </p>
+        <div id="agent-loading" class="loading">
+          <div class="spinner"></div>
+          The agent is thinking, this takes 10-30 seconds...
+        </div>
+        <div id="agent-results" class="results"></div>
+      </div>
+    </div>
+
+    <script>
+      const API = "http://localhost:8001";
+
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document
+            .querySelectorAll(".tab")
+            .forEach((t) => t.classList.remove("active"));
+          document
+            .querySelectorAll(".panel")
+            .forEach((p) => p.classList.remove("active"));
+          tab.classList.add("active");
+          document.getElementById(tab.dataset.panel).classList.add("active");
+        });
+      });
+
+      document.querySelectorAll('input[type="text"]').forEach((input) => {
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const panel = input.closest(".panel").id;
+            if (panel === "title") searchByTitle();
+            else if (panel === "query") searchByQuery();
+            else searchByAgent();
+          }
+        });
+      });
+
+      function renderMovies(recs, containerId) {
+        const container = document.getElementById(containerId);
+        if (!recs.length) {
+          container.innerHTML =
+            '<div class="empty">No matches found. Try a different search.</div>';
+          return;
+        }
+        container.innerHTML = recs
+          .map(
+            (r, i) => `
+                <div class="movie-card">
+                    <div class="movie-info">
+                        <div class="movie-title">
+                            ${r.title}
+                            <span class="rating">${r.vote_average}</span>
+                        </div>
+                        <div class="movie-meta">
+                            ${r.director || "Unknown director"}
+                        </div>
+                    </div>
+                    <div class="movie-score">
+                        <div class="similarity">${(r.similarity * 100).toFixed(0)}%</div>
+                        <div class="score-label">match</div>
+                    </div>
+                </div>
+            `,
+          )
+          .join("");
+      }
+
+      async function searchByTitle() {
+        const title = document.getElementById("title-input").value.trim();
+        if (!title) return;
+        const n = parseInt(document.getElementById("title-n").value);
+        const loading = document.getElementById("title-loading");
+        const results = document.getElementById("title-results");
+        loading.classList.add("active");
+        results.innerHTML = "";
+        try {
+          const res = await fetch(`${API}/recommend/title`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, n }),
+          });
+          const data = await res.json();
+          renderMovies(data.recommendations, "title-results");
+        } catch (e) {
+          results.innerHTML =
+            '<div class="empty">Could not reach the API. Is the server running?</div>';
+        }
+        loading.classList.remove("active");
+      }
+
+      async function searchByQuery() {
+        const query = document.getElementById("query-input").value.trim();
+        if (!query) return;
+        const n = parseInt(document.getElementById("query-n").value);
+        const loading = document.getElementById("query-loading");
+        const results = document.getElementById("query-results");
+        loading.classList.add("active");
+        results.innerHTML = "";
+        try {
+          const res = await fetch(`${API}/recommend/query`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, n }),
+          });
+          const data = await res.json();
+          renderMovies(data.recommendations, "query-results");
+        } catch (e) {
+          results.innerHTML =
+            '<div class="empty">Could not reach the API. Is the server running?</div>';
+        }
+        loading.classList.remove("active");
+      }
+
+      async function searchByAgent() {
+        const query = document.getElementById("agent-input").value.trim();
+        if (!query) return;
+        const n = parseInt(document.getElementById("agent-n").value);
+        const loading = document.getElementById("agent-loading");
+        const results = document.getElementById("agent-results");
+        loading.classList.add("active");
+        results.innerHTML = "";
+        try {
+          const res = await fetch(`${API}/recommend/agent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, n }),
+          });
+          const data = await res.json();
+          renderMovies(data.recommendations, "agent-results");
+          if (data.explanation) {
+            results.innerHTML += `
+                        <div class="explanation">
+                            <div class="explanation-label">Agent's reasoning</div>
+                            ${data.explanation}
+                        </div>
+                    `;
+          }
+        } catch (e) {
+          results.innerHTML =
+            '<div class="empty">Could not reach the API. Is the server running?</div>';
+        }
+        loading.classList.remove("active");
+      }
+    </script>
+  </body>
+</html>

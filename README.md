@@ -6,35 +6,35 @@ The whole system runs with `docker compose up`.
 
 ## The problem
 
-Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list (the same 10 movies for everyone). This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
+Traditional collaborative filtering recommends movies based on what similar users watched. But for new users with no viewing history (the cold-start problem), CF has nothing to work with and degrades to a static popularity list, the same 10 movies for everyone. This system uses semantic understanding of movie content to provide personalized recommendations from the first interaction, using only a natural language description of what the user likes.
 
 ## Architecture
 
 ```
 User Query
-    │
-    ▼
-┌──────────────────────────────────────────────────────┐
-│                  LangGraph Agent                     │
-│                                                      │
-│  ┌───────────┐   ┌───────────┐   ┌───────────┐       │
-│  │  Query    │──▶│  Vector   │──▶│ Re-Ranker│       │
-│  │  Parser   │   │  Search   │   │ (Llama    │       │
-│  │(Llama 3.1)│   │           │   │  3.1 8B)  │       │
-│  └───────────┘   └─────┬─────┘   └─────┬─────┘       │
-│                        │               │             │
-│                        ▼               ▼             │
-│                 ┌────────────┐   ┌───────────┐       │
-│                 │ ChromaDB   │   │ Explainer │       │
-│                 │ (Docker)   │   │ (Llama    │       │
-│                 ├────────────┤   │  3.1 8B)  │       │
-│                 │ Pinecone   │   └───────────┘       │
-│                 │ (Cloud)    │                       │
-│                 └────────────┘                       │
-└──────────────────────────────────────────────────────┘
-    │
-    ▼
-FastAPI (port 8001)
+    |
+    v
++------------------------------------------------------+
+|                  LangGraph Agent                     |
+|                                                      |
+|  +-----------+   +-----------+   +-----------+       |
+|  |  Query    |-->|  Vector   |-->| Re-Ranker |       |
+|  |  Parser   |   |  Search   |   | (Llama    |       |
+|  |(Llama 3.1)|   |           |   |  3.1 8B)  |       |
+|  +-----------+   +-----+-----+   +-----+-----+       |
+|                        |               |             |
+|                        v               v             |
+|                 +------------+   +-----------+       |
+|                 | ChromaDB   |   | Explainer |       |
+|                 | (Docker)   |   | (Llama    |       |
+|                 +------------+   |  3.1 8B)  |       |
+|                 | Pinecone   |   +-----------+       |
+|                 | (Cloud)    |                       |
+|                 +------------+                       |
++------------------------------------------------------+
+    |
+    v
+FastAPI + Frontend (port 8001)
 ```
 
 ## How it works
@@ -47,10 +47,18 @@ FastAPI (port 8001)
 
 **LangGraph Agent:** A 4-node stateful agent pipeline:
 
-1. **Query Parser** — classifies intent (by-title vs free-text) and extracts movie titles
-2. **Vector Search** — queries ChromaDB for top-20 candidates
-3. **Re-Ranker** — Llama 3.1 8B re-ranks candidates based on query context
-4. **Explainer** — generates a natural language explanation of recommendations
+1. **Query Parser** - classifies intent (by-title vs free-text) and extracts movie titles
+2. **Vector Search** - queries ChromaDB for top-20 candidates
+3. **Re-Ranker** - Llama 3.1 8B re-ranks candidates based on query context
+4. **Explainer** - generates a natural language explanation of recommendations
+
+## Dashboard
+
+Three tabs, built for a non-technical user:
+
+- **Find similar** enters a movie title and returns the closest matches by vector similarity.
+- **Describe what you want** takes a free-text description of mood, genre, or theme and finds matching movies via semantic search.
+- **Ask the agent** runs the full LangGraph pipeline: parses intent, searches, re-ranks with Llama 3.1, and explains why each movie was recommended.
 
 ## Cold-start benchmark
 
@@ -63,7 +71,7 @@ The key experiment: simulate users with no viewing history. The user provides on
 | Unique recs (196 users) | 782      | 10       |
 | Personalization         | Yes      | None     |
 
-CF degrades to a static popularity list for cold-start users — the same 10 movies (Shawshank Redemption, Godfather, Fight Club, etc.) for every user regardless of taste. Semantic search provides 78x more diverse, personalized recommendations using only a text description of preferences.
+CF degrades to a static popularity list for cold-start users, the same 10 movies (Shawshank Redemption, Godfather, Fight Club, etc.) for every user regardless of taste. Semantic search provides 78x more diverse, personalized recommendations using only a text description of preferences.
 
 ## Training details
 
@@ -91,6 +99,7 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
 | Vector DB     | ChromaDB (Docker), Pinecone (Cloud)      |
 | Agent         | LangGraph + LangChain                    |
 | API           | FastAPI                                  |
+| Frontend      | Vanilla HTML/CSS/JS                      |
 | Orchestration | Docker Compose                           |
 | Training GPU  | NVIDIA H200 (Northeastern HPC)           |
 
@@ -105,7 +114,14 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
 
 ### Setup
 
-1. Create a `.env` file in the project root:
+1. Clone the repo:
+
+   ```bash
+   git clone https://github.com/AryanBhanushali/Netflix-Semantic-Rec.git
+   cd Netflix-Semantic-Rec
+   ```
+
+2. Create a `.env` file in the project root:
 
    ```
    KAGGLE_USERNAME=your_username
@@ -117,7 +133,7 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
    FINETUNED_MODEL_PATH=models/finetuned
    ```
 
-2. Download and process the data:
+3. Download and process the data:
 
    ```bash
    pip install -r requirements.txt
@@ -125,42 +141,55 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
    python src/embeddings/baseline.py
    ```
 
-3. Start the services:
+4. Start the services:
 
    ```bash
    docker compose up -d
    ```
 
-4. Pull the LLM model:
+5. Pull the LLM model:
 
    ```bash
    docker compose exec ollama ollama pull llama3.1:8b
    ```
 
-5. Index into vector databases:
+6. Index into vector databases:
 
    ```bash
    python src/vectordb/chroma_client.py
    python src/vectordb/pinecone_client.py
    ```
 
-6. Open the API docs at `http://localhost:8001/docs`.
+7. Open the dashboard at `http://localhost:8001`.
+
+### Running without Docker
+
+If you prefer to run the API directly:
+
+```bash
+docker compose up -d chromadb
+ollama run llama3.1:8b
+uvicorn src.api.main:app --port 8001
+```
+
+Then open `http://localhost:8001`.
 
 ### Services
 
-| Service  | URL                        |
-| -------- | -------------------------- |
-| API docs | http://localhost:8001/docs |
-| ChromaDB | http://localhost:8000      |
+| Service   | URL                        |
+| --------- | -------------------------- |
+| Dashboard | http://localhost:8001      |
+| API docs  | http://localhost:8001/docs |
+| ChromaDB  | http://localhost:8000      |
 
 ## API
 
-| Endpoint           | Method | Description                                              |
-| ------------------ | ------ | -------------------------------------------------------- |
-| `/health`          | GET    | Health check                                             |
-| `/recommend/title` | POST   | Recommend by movie title (vector similarity)             |
-| `/recommend/query` | POST   | Recommend by free-text query (semantic search)           |
-| `/recommend/agent` | POST   | Full agent pipeline (parse → search → re-rank → explain) |
+| Endpoint           | Method | Description                                           |
+| ------------------ | ------ | ----------------------------------------------------- |
+| `/health`          | GET    | Health check                                          |
+| `/recommend/title` | POST   | Recommend by movie title (vector similarity)          |
+| `/recommend/query` | POST   | Recommend by free-text query (semantic search)        |
+| `/recommend/agent` | POST   | Full agent pipeline (parse, search, re-rank, explain) |
 
 ### Example
 
@@ -168,11 +197,11 @@ CF degrades to a static popularity list for cold-start users — the same 10 mov
 POST /recommend/agent
 {"query": "movies similar to Inception", "n": 5}
 
-→ Inception           (similarity: 0.62)
-→ Trance              (similarity: 0.49)
-→ Cube                (similarity: 0.49)
-→ Vanilla Sky         (similarity: 0.47)
-→ Primer              (similarity: 0.47)
+-> Inception           (similarity: 0.62)
+-> Trance              (similarity: 0.49)
+-> Cube                (similarity: 0.49)
+-> Vanilla Sky         (similarity: 0.47)
+-> Primer              (similarity: 0.47)
 
 Explanation: "Recommended movies share themes of mind-bending
 psychological tension, reality manipulation, and layered
@@ -181,34 +210,36 @@ narratives similar to Inception..."
 
 ## Data
 
-- **TMDB 5000 Movies** — plots, genres, cast, keywords ([Kaggle](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata))
-- **MovieLens 100K** — user ratings for CF baseline comparison ([Kaggle](https://www.kaggle.com/datasets/sriharshabsprasad/movielens-dataset-100k-ratings))
-- **TMDB API** — similar movies endpoint (ground truth for evaluation)
+- **TMDB 5000 Movies** - plots, genres, cast, keywords ([Kaggle](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata))
+- **MovieLens 100K** - user ratings for CF baseline comparison ([Kaggle](https://www.kaggle.com/datasets/sriharshabsprasad/movielens-dataset-100k-ratings))
+- **TMDB API** - similar movies endpoint (ground truth for evaluation)
 
 ## Project structure
 
 ```
 netflix-semantic-rec/
+├── static/
+│   └── index.html              dashboard UI
 ├── notebooks/
-│   ├── 01_data_prep.ipynb          TMDB cleaning, pair generation
-│   ├── 02_lora_finetune.ipynb      QLoRA training on H200
-│   └── 03_benchmark.ipynb          semantic vs CF comparison
+│   ├── 01_data_prep.ipynb      TMDB cleaning, pair generation
+│   ├── 02_lora_finetune.ipynb  QLoRA training on H200
+│   └── 03_benchmark.ipynb      semantic vs CF comparison
 ├── src/
 │   ├── embeddings/
-│   │   ├── baseline.py             sentence-transformers embeddings
-│   │   └── finetuned.py            fine-tuned model embeddings
+│   │   ├── baseline.py         sentence-transformers embeddings
+│   │   └── finetuned.py        fine-tuned model embeddings
 │   ├── vectordb/
-│   │   ├── chroma_client.py        ChromaDB Docker indexing
-│   │   └── pinecone_client.py      Pinecone cloud indexing
+│   │   ├── chroma_client.py    ChromaDB Docker indexing
+│   │   └── pinecone_client.py  Pinecone cloud indexing
 │   ├── agent/
-│   │   ├── graph.py                LangGraph 4-node agent
-│   │   └── tools.py                search + rerank tools
+│   │   ├── graph.py            LangGraph 4-node agent
+│   │   └── tools.py            search + rerank tools
 │   └── api/
-│       └── main.py                 FastAPI endpoints
+│       └── main.py             FastAPI + frontend serving
 ├── data/
-│   └── processed/                  processed CSVs (gitignored)
+│   └── processed/              processed CSVs (gitignored)
 ├── models/
-│   └── finetuned/                  QLoRA adapter weights
+│   └── finetuned/              QLoRA adapter weights
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
