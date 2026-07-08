@@ -2,7 +2,7 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.agent.tools import recommend_by_title, recommend_by_query
+from src.agent.tools import recommend_by_title, recommend_by_query, rerank, get_rich_text, df
 
 llm = ChatOllama(model="llama3.1:8b")
 
@@ -44,19 +44,61 @@ def vector_search(state: AgentState) -> AgentState:
 
 
 def re_ranker(state: AgentState) -> AgentState:
-    recs = state["recommendations"][:20]
-    titles = "\n".join([f"{i+1}. {r['title']} (rating: {r['vote_average']})" for i, r in enumerate(recs)])
+    recs = state["recommendations"]
+    if not recs:
+        return state
+    # Build the query text for the cross-encoder
+    if state["intent"] == "by_title":
+        query_text = get_rich_text(state["title"])
+    else:
+        query_text = state["query"]
+    # Attach rich_text to each candidate so the reranker can score them
+    candidates = []
+    for r in recs:
+        m = df[df["title"] == r["title"]]
+        rt = m.iloc[0]["rich_text"] if not m.empty else r["title"]
+        candidates.append({**r, "rich_text": rt})
+    reranked = rerank(query_text, candidates, top_n=state["n"])
+    if reranked is None:
+        # Cross-encoder unavailable (no GPU / insufficient RAM) — fall back to
+        # Ollama generative reranking so the pipeline still runs anywhere.
+        reranked = _ollama_rerank(query_text, candidates, state["n"])
+    # strip rich_text before returning
+    cleaned = [{k: v for k, v in c.items() if k != "rich_text"} for c in reranked]
+    return {**state, "recommendations": cleaned}
+
+
+def _ollama_rerank(query_text: str, candidates: list, n: int) -> list:
+    """Fallback reranker: ask the stock Llama (via Ollama) to reorder the
+    candidate titles by relevance to the query. Best-effort — if parsing the
+    LLM output fails, returns the candidates in their original retrieval order."""
+    titles = [c["title"] for c in candidates]
     messages = [
-        SystemMessage(content="""You are a movie recommendation re-ranker. Given a user query and a list of candidate movies, select the most relevant movies and return ONLY their numbers, comma-separated, in order of relevance. Nothing else."""),
-        HumanMessage(content=f"Query: {state['query']}\n\nCandidates:\n{titles}")
+        SystemMessage(content=(
+            "You are a movie reranker. Given a query and a numbered list of "
+            "candidate movies, return the numbers reordered from most to least "
+            "relevant, comma-separated, e.g. '3,1,4,2'. Return ONLY the numbers."
+        )),
+        HumanMessage(content=(
+            f"Query: {query_text}\n\nCandidates:\n" +
+            "\n".join(f"{i+1}. {t}" for i, t in enumerate(titles))
+        )),
     ]
-    response = llm.invoke(messages)
     try:
-        indices = [int(x.strip()) - 1 for x in response.content.strip().split(",")]
-        reranked = [recs[i] for i in indices if 0 <= i < len(recs)]
-        return {**state, "recommendations": reranked[:state["n"]]}
-    except:
-        return {**state, "recommendations": recs[:state["n"]]}
+        resp = llm.invoke(messages).content.strip()
+        idxs = [int(x) - 1 for x in resp.replace(" ", "").split(",")]
+        seen, order = set(), []
+        for i in idxs:
+            if 0 <= i < len(candidates) and i not in seen:
+                seen.add(i)
+                order.append(i)
+        # append any candidates the LLM dropped, preserving retrieval order
+        for i in range(len(candidates)):
+            if i not in seen:
+                order.append(i)
+        return [candidates[i] for i in order[:n]]
+    except Exception:
+        return candidates[:n]
 
 
 def explainer(state: AgentState) -> AgentState:

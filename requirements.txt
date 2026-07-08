@@ -13,3 +13,11 @@ langchain-ollama
 langchain-core
 scikit-learn
 requests
+torch==2.5.1
+transformers==4.46.3
+peft
+bitsandbytes==0.49.2
+accelerate
+datasets==2.20.0
+pyarrow==17.0.0
+psutil

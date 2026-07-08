@@ -11,5 +11,7 @@
   ],
   "model_max_length": 131072,
   "pad_token": "<|end_of_text|>",
-  "tokenizer_class": "TokenizersBackend"
+  "padding_side": "left",
+  "tokenizer_class": "TokenizersBackend",
+  "unk_token": null
 }

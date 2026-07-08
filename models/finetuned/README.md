@@ -1,9 +1,9 @@
 ---
 tags:
-- base_model:adapter:NousResearch/Meta-Llama-3.1-8B
+- base_model:adapter:unsloth/Llama-3.2-3B
 - lora
 - transformers
-base_model: NousResearch/Meta-Llama-3.1-8B
+base_model: unsloth/Llama-3.2-3B
 widget:
 - source_sentence: 'The Lost World: Jurassic Park | Four years after Jurassic Park''s
     genetically bred dinosaurs ran amok, multimillionaire John Hammond shocks chaos
