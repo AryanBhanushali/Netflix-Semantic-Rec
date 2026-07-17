@@ -25,12 +25,15 @@ User Query
 |                        |         |  encoder) |       |
 |                        v         +-----+-----+       |
 |                 +------------+         |             |
-|                 | ChromaDB   |         v             |
-|                 | (Docker)   |   +-----------+       |
+|                 | ChromaDB   |         | fallback:   |
+|                 | (Docker)   |         | Llama 3.1   |
+|                 +------------+         | 8B Ollama   |
+|                 | Pinecone   |         v             |
+|                 | (Cloud)    |   +-----------+       |
 |                 +------------+   | Explainer |       |
-|                 | Pinecone   |   | (Llama    |       |
-|                 | (Cloud)    |   |  3.1 8B)  |       |
-|                 +------------+   +-----------+       |
+|                                  | (Llama    |       |
+|                                  |  3.1 8B)  |       |
+|                                  +-----------+       |
 +------------------------------------------------------+
     |
     v
@@ -41,9 +44,9 @@ FastAPI + Frontend (port 8001)
 
 **Retrieval embeddings:** Movie plots, genres, cast, keywords, and director are combined into a rich text field per movie. Sentence-transformers (all-MiniLM-L6-v2) encodes these into 384-dimensional vectors for semantic search. Retrieval uses these MiniLM embeddings throughout.
 
-**QLoRA fine-tuned reranker:** A Llama 3.2 3B model was fine-tuned with QLoRA (4-bit NF4 quantization, LoRA r=16, alpha=32) as a cross-encoder for sequence classification. It takes a (query, candidate) text pair and outputs a single relevance score, then reorders the retrieved candidates. It was trained on roughly 42K positive and negative movie-similarity pairs sourced from TMDB's similar movies API. This is a reranking stage on top of MiniLM retrieval, not a replacement for it.
+**QLoRA fine-tuned reranker:** A Llama 3.2 3B model was fine-tuned with QLoRA (4-bit NF4 quantization, LoRA r=16, alpha=32) as a cross-encoder for sequence classification. It takes a (query, candidate) text pair and outputs a single relevance score, then reorders the retrieved candidates. It was trained on 20,867 positive and 20,867 hard-negative movie-similarity pairs, where positives come from TMDB's similar movies API and negatives are cosine-mined (movies that are close in embedding space but not in the TMDB similar list, so the model must learn finer distinctions than random negatives would require). This is a reranking stage on top of MiniLM retrieval, not a replacement for it.
 
-**Why a cross-encoder and not fine-tuned embeddings:** An earlier experiment fine-tuned an 8B model as a bi-encoder to produce similarity embeddings, but on our evaluation it scored below the much smaller base MiniLM model, so it was dropped. Decoder-only models with mean-pooled hidden states are poorly suited to producing similarity embeddings off the shelf. A cross-encoder, where the query and candidate attend to each other in a single pass, is the architecture that actually adds value on top of MiniLM retrieval.
+**Why a cross-encoder and not fine-tuned embeddings:** An earlier experiment fine-tuned a model as a bi-encoder to produce similarity embeddings, but on our evaluation it scored below the much smaller base MiniLM model, so it was dropped. Decoder-only models with mean-pooled hidden states are poorly suited to producing similarity embeddings off the shelf. A cross-encoder, where the query and candidate attend to each other in a single pass, is the architecture that actually adds value on top of MiniLM retrieval.
 
 **Vector databases:** Embeddings are indexed into both ChromaDB (self-hosted Docker container) and Pinecone (cloud free tier) for dual-store retrieval and benchmarking.
 
@@ -82,28 +85,37 @@ The key experiment: simulate users with no viewing history. The user provides on
 | Unique recs (196 users) | 782      | 10       |
 | Personalization         | Yes      | None     |
 
-How to read this: CF scores higher on NDCG@10 and Hit-Rate@10, because SVD is evaluated on MovieLens users who do have rating history, which is the setting CF is built for. The point of the comparison is what happens under cold-start. CF has no per-user signal to work with, so it collapses to a static popularity list, the same 10 movies (Shawshank Redemption, Godfather, Fight Club, and so on) for every one of the 196 users regardless of taste. Semantic search returns 782 unique recommendations across those users using only a text description of preferences. The takeaway is not that semantic retrieval beats CF on accuracy where history exists; it is that semantic retrieval provides personalized, diverse recommendations in the cold-start setting that CF structurally cannot.
-
-## Reranker evaluation
-
-The QLoRA cross-encoder reaches NDCG@10 of approximately 0.20 on a held-out set of TMDB similar-movie ground truth. This is a real signal, meaningfully better than random ordering, but a reranker improves the ordering of already-retrieved candidates rather than working miracles. TMDB's similar-movies lists are sparse ground truth, so absolute NDCG values are low for all methods on this evaluation.
+How to read this: CF scores higher on NDCG@10 and Hit-Rate@10. This is expected and not the point. SVD is evaluated against MovieLens rating history, and when a user has no history CF falls back to globally popular titles, which score well on rating-based ground truth because popular movies are exactly the ones most users rated. The metric rewards popularity, which is the one thing the cold-start CF fallback does. The meaningful rows are the last two: CF returns the same 10 movies (Shawshank Redemption, Godfather, Fight Club, and so on) for every one of the 196 users regardless of taste, while semantic search returns 782 unique recommendations driven by each user's description. The takeaway is not that semantic retrieval beats CF on accuracy where history exists; it is that semantic retrieval provides personalized, diverse recommendations in the cold-start setting that CF structurally cannot.
 
 ## Training details
 
-| Parameter        | Value                                                         |
-| ---------------- | ------------------------------------------------------------- |
-| Base Model       | Llama 3.2 3B                                                  |
-| Task             | Cross-encoder, sequence classification (1 label)              |
-| Quantization     | 4-bit NF4 (QLoRA)                                             |
-| LoRA Rank        | 16                                                            |
-| LoRA Alpha       | 32                                                            |
-| Target Modules   | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
-| Saved Modules    | classifier / score head                                       |
-| Training Pairs   | ~21K positive + ~21K negative                                 |
-| Source           | TMDB similar movies API                                       |
-| Best Checkpoint  | Epoch 2 (selected by NDCG@10)                                 |
-| Reranker NDCG@10 | ~0.20                                                         |
-| GPU              | NVIDIA H200 (Northeastern HPC)                                |
+All values below come directly from `notebooks/02_lora_finetune.ipynb`.
+
+| Parameter          | Value                                                         |
+| ------------------ | ------------------------------------------------------------ |
+| Base Model         | Llama 3.2 3B (unsloth/Llama-3.2-3B)                          |
+| Task               | Cross-encoder, sequence classification (1 label)             |
+| Quantization       | 4-bit NF4 (QLoRA)                                             |
+| LoRA Rank          | 16                                                           |
+| LoRA Alpha         | 32                                                           |
+| Target Modules     | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
+| Trainable Params   | 24,316,928 (0.75%)                                           |
+| Saved Modules      | classifier / score head (via modules_to_save)                |
+| Training Pairs     | 20,867 positive + 20,867 hard-negative (cosine-mined)        |
+| Train Split        | 37,560 pairs                                                 |
+| Eval Set           | 100 held-out query movies, TMDB similar-movie ground truth   |
+| Positives Source   | TMDB similar movies API                                      |
+| Epoch 1            | train_loss 0.3594, NDCG@10 0.1692                            |
+| Epoch 2 (best)     | train_loss 0.2453, NDCG@10 0.2039 (checkpointed)            |
+| Epoch 3            | diverged to nan, not saved                                   |
+| Shipped Checkpoint | Epoch 2, NDCG@10 0.2039                                      |
+| GPU                | NVIDIA H200 (Northeastern HPC)                               |
+
+Note on epoch 3: training was configured for 3 epochs, but the run diverged to nan loss partway through epoch 3 (a known risk at lr 2e-4 without warmup on a small trainable-parameter set). The training loop checkpoints on best NDCG@10, so the shipped model is the epoch-2 checkpoint and the divergent epoch-3 weights were correctly discarded. The notebook output shows this explicitly.
+
+## Reranker evaluation
+
+The QLoRA cross-encoder reaches NDCG@10 of 0.2039 at its best checkpoint (epoch 2) on a held-out set of 100 query movies with TMDB similar-movie ground truth. This is a real signal, meaningfully better than random ordering, but a reranker improves the ordering of already-retrieved candidates rather than working miracles. TMDB's similar-movies lists are sparse ground truth, so absolute NDCG values are low for all methods on this evaluation.
 
 ## Stack
 
@@ -208,12 +220,12 @@ Then open `http://localhost:8001`.
 
 ## API
 
-| Endpoint           | Method | Description                                          |
-| ------------------ | ------ | ---------------------------------------------------- |
-| `/health`          | GET    | Health check                                         |
-| `/recommend/title` | POST   | Recommend by movie title (vector similarity)         |
-| `/recommend/query` | POST   | Recommend by free-text query (semantic search)       |
-| `/recommend/agent` | POST   | Full agent pipeline (parse, search, rerank, explain) |
+| Endpoint           | Method | Description                                           |
+| ------------------ | ------ | ----------------------------------------------------- |
+| `/health`          | GET    | Health check                                          |
+| `/recommend/title` | POST   | Recommend by movie title (vector similarity)          |
+| `/recommend/query` | POST   | Recommend by free-text query (semantic search)        |
+| `/recommend/agent` | POST   | Full agent pipeline (parse, search, rerank, explain)  |
 
 ### Example
 
